@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1C2128">
+<title>Agent Mensura · Analyse VRD</title>
+<link rel="manifest" href="data:application/json,%7B%22name%22%3A%22Agent%20Mensura%22%2C%22short_name%22%3A%22Mensura%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%231C2128%22%2C%22theme_color%22%3A%22%231C2128%22%7D">
+<style>
+  :root {
+    --bg:       #1C2128;
+    --surface:  #262D37;
+    --border:   #364152;
+    --text:     #CDD5DF;
+    --muted:    #6B7A90;
+    --yellow:   #F5C842;
+    --green:    #2ECC71;
+    --red:      #E74C3C;
+    --blue:     #4A9EDB;
+    --radius:   6px;
+    --mono: 'Courier New', monospace;
+    --sans: 'Segoe UI', system-ui, sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;display:flex;flex-direction:column}
+
+  /* ── Header ── */
+  header{padding:20px 28px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px}
+  .logo{width:36px;height:36px;background:var(--yellow);border-radius:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .logo svg{width:22px;height:22px;fill:var(--bg)}
+  .brand h1{font-size:1.1rem;font-weight:700;color:#fff;letter-spacing:.03em}
+  .brand p{font-size:.75rem;color:var(--muted);margin-top:2px}
+
+  /* ── Layout ── */
+  .main{display:flex;flex:1;overflow:hidden}
+  .sidebar{width:320px;flex-shrink:0;border-right:1px solid var(--border);display:flex;flex-direction:column;padding:20px}
+  .chat-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
+
+  /* ── Upload zone ── */
+  .upload-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:24px 16px;text-align:center;cursor:pointer;transition:.2s;background:var(--surface)}
+  .upload-zone:hover,.upload-zone.drag{border-color:var(--yellow);background:#2a3140}
+  .upload-zone svg{width:36px;height:36px;stroke:var(--muted);margin-bottom:10px}
+  .upload-zone p{font-size:.8rem;color:var(--muted);line-height:1.5}
+  .upload-zone strong{color:var(--yellow)}
+  #fileInput{display:none}
+
+  /* ── File list ── */
+  .file-list{margin-top:14px;display:flex;flex-direction:column;gap:6px}
+  .file-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;display:flex;align-items:center;gap:8px;font-size:.78rem}
+  .file-item .badge{background:#2a3f2a;color:var(--green);border-radius:3px;padding:1px 6px;font-size:.68rem;font-weight:700}
+  .file-item .name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+  .file-item button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;line-height:1;padding:0 2px}
+  .file-item button:hover{color:var(--red)}
+
+  /* ── Analyse button ── */
+  .btn-analyse{width:100%;margin-top:16px;padding:12px;background:var(--yellow);color:var(--bg);font-weight:700;font-size:.9rem;border:none;border-radius:var(--radius);cursor:pointer;letter-spacing:.04em;transition:.2s}
+  .btn-analyse:hover:not(:disabled){background:#f7d55c}
+  .btn-analyse:disabled{opacity:.4;cursor:not-allowed}
+
+  /* ── Divider ── */
+  .sidebar-section{margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
+  .sidebar-section h3{font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:10px}
+
+  /* ── Merlon calc ── */
+  .merlon-calc{display:none;flex-direction:column;gap:10px}
+  .merlon-calc.visible{display:flex}
+  .slider-row{display:flex;flex-direction:column;gap:4px}
+  .slider-row label{font-size:.75rem;color:var(--muted);display:flex;justify-content:space-between}
+  .slider-row label span{color:var(--yellow);font-family:var(--mono);font-weight:700}
+  .slider-row input[type=range]{width:100%;accent-color:var(--yellow)}
+  .merlon-result{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;text-align:center}
+  .merlon-result .vol{font-family:var(--mono);font-size:1.4rem;font-weight:700;color:var(--yellow)}
+  .merlon-result .lbl{font-size:.72rem;color:var(--muted);margin-top:2px}
+
+  /* ── Chat messages ── */
+  .messages{flex:1;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:16px}
+  .msg{max-width:90%;display:flex;flex-direction:column;gap:4px}
+  .msg.user{align-self:flex-end;align-items:flex-end}
+  .msg.assistant{align-self:flex-start;align-items:flex-start}
+  .msg-bubble{padding:12px 16px;border-radius:10px;font-size:.87rem;line-height:1.6}
+  .msg.user .msg-bubble{background:var(--yellow);color:var(--bg);font-weight:600}
+  .msg.assistant .msg-bubble{background:var(--surface);border:1px solid var(--border)}
+  .msg-bubble pre{white-space:pre-wrap;font-family:var(--mono);font-size:.8rem}
+
+  /* Résultats synthèse */
+  .result-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin:8px 0;font-size:.83rem}
+  .result-card h4{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px}
+  .result-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)}
+  .result-row:last-child{border-bottom:none}
+  .result-row .rk{color:var(--text)}
+  .result-row .rv{font-family:var(--mono);font-weight:700}
+  .rv.pos{color:var(--green)}
+  .rv.neg{color:var(--red)}
+  .rv.neutral{color:var(--yellow)}
+  .big-result{margin:10px 0;padding:12px 16px;border-radius:6px;font-family:var(--mono);font-size:1.2rem;font-weight:700;text-align:center}
+  .big-result.deblai{background:#1a3d28;border:2px solid var(--green);color:var(--green)}
+  .big-result.remblai{background:#3d1a1a;border:2px solid var(--red);color:var(--red)}
+  .alert{background:#2a2a1a;border:1px solid #7a7a10;border-radius:var(--radius);padding:10px 14px;font-size:.8rem;color:#e0d060;margin:6px 0}
+  .alert::before{content:'⚠ ';font-weight:700}
+  .info{background:#1a2a3a;border:1px solid #2a5a8a;border-radius:var(--radius);padding:10px 14px;font-size:.8rem;color:#80b8e0;margin:6px 0}
+  .info::before{content:'ℹ ';font-weight:700}
+
+  /* ── Input bar ── */
+  .input-bar{padding:16px 24px;border-top:1px solid var(--border);display:flex;gap:10px}
+  .input-bar textarea{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:10px 14px;font-family:var(--sans);font-size:.87rem;resize:none;height:44px;line-height:1.4;outline:none;transition:.2s}
+  .input-bar textarea:focus{border-color:var(--yellow)}
+  .input-bar button{padding:0 18px;background:var(--yellow);color:var(--bg);font-weight:700;border:none;border-radius:var(--radius);cursor:pointer;transition:.2s;font-size:.9rem}
+  .input-bar button:hover:not(:disabled){background:#f7d55c}
+  .input-bar button:disabled{opacity:.4;cursor:not-allowed}
+
+  /* Typing indicator */
+  .typing{display:flex;gap:4px;align-items:center;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;width:fit-content}
+  .typing span{width:7px;height:7px;border-radius:50%;background:var(--muted);animation:blink 1.2s infinite}
+  .typing span:nth-child(2){animation-delay:.2s}
+  .typing span:nth-child(3){animation-delay:.4s}
+  @keyframes blink{0%,80%,100%{opacity:.2}40%{opacity:1}}
+
+  /* Empty state */
+  .empty-state{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--muted);text-align:center;padding:40px}
+  .empty-state svg{width:56px;height:56px;stroke:var(--border)}
+  .empty-state p{font-size:.85rem;max-width:280px;line-height:1.6}
+
+  /* Scrollbar */
+  ::-webkit-scrollbar{width:5px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+  @media(max-width:680px){
+    .main{flex-direction:column}
+    .sidebar{width:100%;border-right:none;border-bottom:1px solid var(--border)}
+    .merlon-calc.visible{display:flex}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <svg viewBox="0 0 24 24"><path d="M3 21L12 3l9 18H3zm9-14l-5.5 11h11L12 7z"/></svg>
+  </div>
+  <div class="brand">
+    <h1>Agent Mensura</h1>
+    <p>Analyse automatique des bilans déblais / remblais</p>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="upload-zone" id="dropZone">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>
+      <p>Dépose ici les <strong>PDF Mensura</strong><br>Tableau déblais/remblais + matériaux</p>
+      <p style="margin-top:6px;font-size:.7rem">ou <strong>clique</strong> pour sélectionner</p>
+    </div>
+    <input type="file" id="fileInput" accept=".pdf" multiple>
+    <div class="file-list" id="fileList"></div>
+    <button class="btn-analyse" id="btnAnalyse" disabled>▶ Lancer l'analyse</button>
+
+    <!-- Merlon calculator (affiché après analyse) -->
+    <div class="sidebar-section">
+      <h3>Simulateur de merlon</h3>
+      <div class="merlon-calc" id="merlonCalc">
+        <div class="slider-row">
+          <label>Largeur base <span id="wVal">5 m</span></label>
+          <input type="range" id="wSlider" min="3" max="10" value="5" step="0.5">
+        </div>
+        <div class="slider-row">
+          <label>Hauteur <span id="hVal">3 m</span></label>
+          <input type="range" id="hSlider" min="1" max="10" value="3" step="0.5">
+        </div>
+        <div class="slider-row">
+          <label>Longueur <span id="lVal">30 m</span></label>
+          <input type="range" id="lSlider" min="10" max="100" value="30" step="5">
+        </div>
+        <div class="merlon-result">
+          <div class="vol" id="merlonVol">0 m³</div>
+          <div class="lbl">Volume merlon (section trapézoïdale)</div>
+        </div>
+      </div>
+      <p id="merlonHint" style="font-size:.75rem;color:var(--muted);line-height:1.4">Le simulateur s'active après analyse pour estimer le volume d'un merlon de stockage.</p>
+    </div>
+  </div>
+
+  <!-- Chat area -->
+  <div class="chat-area">
+    <div class="messages" id="messages">
+      <div class="empty-state" id="emptyState">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1" stroke-linecap="round">
+          <polygon points="12,2 22,20 2,20"/><line x1="12" y1="10" x2="12" y2="14"/><circle cx="12" cy="17" r=".5" fill="currentColor"/>
+        </svg>
+        <p>Dépose un ou deux PDF Mensura dans le panneau gauche, puis lance l'analyse pour obtenir la synthèse des mouvements de terre.</p>
+      </div>
+    </div>
+    <div class="input-bar">
+      <textarea id="userInput" placeholder="Question complémentaire sur l'analyse…" rows="1" disabled></textarea>
+      <button id="sendBtn" disabled>Envoyer</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ─── State ───────────────────────────────────────────────
+let files = [];
+let conversationHistory = [];
+let analysisContext = '';
+
+// ─── Upload ──────────────────────────────────────────────
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const fileList  = document.getElementById('fileList');
+const btnAnalyse = document.getElementById('btnAnalyse');
+
+dropZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => addFiles([...e.target.files]));
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag');
+  addFiles([...e.dataTransfer.files].filter(f => f.type === 'application/pdf'));
+});
+
+function addFiles(newFiles) {
+  newFiles.forEach(f => { if (!files.find(x => x.name === f.name)) files.push(f); });
+  renderFileList();
+}
+
+function removeFile(i) {
+  files.splice(i, 1);
+  renderFileList();
+}
+
+function renderFileList() {
+  fileList.innerHTML = '';
+  files.forEach((f, i) => {
+    const el = document.createElement('div');
+    el.className = 'file-item';
+    el.innerHTML = `<span class="badge">PDF</span><span class="name">${f.name}</span><button onclick="removeFile(${i})" title="Retirer">×</button>`;
+    fileList.appendChild(el);
+  });
+  btnAnalyse.disabled = files.length === 0;
+}
+
+// ─── Merlon calculator ───────────────────────────────────
+const wSlider = document.getElementById('wSlider');
+const hSlider = document.getElementById('hSlider');
+const lSlider = document.getElementById('lSlider');
+const wVal = document.getElementById('wVal');
+const hVal = document.getElementById('hVal');
+const lVal = document.getElementById('lVal');
+const merlonVol = document.getElementById('merlonVol');
+
+function updateMerlon() {
+  const w = parseFloat(wSlider.value);
+  const h = parseFloat(hSlider.value);
+  const l = parseFloat(lSlider.value);
+  wVal.textContent = w + ' m';
+  hVal.textContent = h + ' m';
+  lVal.textContent = l + ' m';
+  // Section trapézoïdale : talus 1/1 → base haut = w - 2h (min 0.5m)
+  const topW = Math.max(0.5, w - 2 * h);
+  const section = (w + topW) / 2 * h;
+  const vol = section * l;
+  merlonVol.textContent = Math.round(vol) + ' m³';
+}
+[wSlider, hSlider, lSlider].forEach(s => s.addEventListener('input', updateMerlon));
+updateMerlon();
+
+function showMerlonCalc() {
+  document.getElementById('merlonCalc').classList.add('visible');
+  document.getElementById('merlonHint').style.display = 'none';
+}
+
+// ─── Messages ────────────────────────────────────────────
+const messagesEl = document.getElementById('messages');
+const emptyState  = document.getElementById('emptyState');
+const userInput   = document.getElementById('userInput');
+const sendBtn     = document.getElementById('sendBtn');
+
+function addMessage(role, content, isHTML = false) {
+  if (emptyState) emptyState.style.display = 'none';
+  const wrap = document.createElement('div');
+  wrap.className = `msg ${role}`;
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+  if (isHTML) bubble.innerHTML = content;
+  else bubble.textContent = content;
+  wrap.appendChild(bubble);
+  messagesEl.appendChild(wrap);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  return bubble;
+}
+
+function showTyping() {
+  const wrap = document.createElement('div');
+  wrap.className = 'msg assistant';
+  wrap.id = 'typingMsg';
+  wrap.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
+  messagesEl.appendChild(wrap);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function removeTyping() {
+  const t = document.getElementById('typingMsg');
+  if (t) t.remove();
+}
+
+// ─── PDF → base64 ────────────────────────────────────────
+function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+
+// ─── Analyse principale ──────────────────────────────────
+btnAnalyse.addEventListener('click', runAnalysis);
+
+async function runAnalysis() {
+  if (files.length === 0) return;
+  btnAnalyse.disabled = true;
+  conversationHistory = [];
+
+  addMessage('user', `Analyse de ${files.length} fichier(s) : ${files.map(f=>f.name).join(', ')}`);
+  showTyping();
+
+  // Préparer les fichiers en base64
+  const pdfContents = [];
+  for (const f of files) {
+    const b64 = await fileToBase64(f);
+    pdfContents.push({ name: f.name, data: b64 });
+  }
+
+  const systemPrompt = `Tu es un expert VRD (Voirie et Réseaux Divers) spécialisé dans l'analyse des bilans de mouvements de terre issus du logiciel Mensura. Tu analyses des tableaux PDF et produit une synthèse structurée selon des règles métier précises.
+
+RÈGLES DE LECTURE DES TABLEAUX :
+
+Le tableau "Déblais/Remblais" contient 4 colonnes :
+- SURFACE PROJET : numéro + code de plateforme (_EV, _VOI, _PIET, _ASS, _BAT, _repro…) + structure + épaisseurs + surface
+- DECAPAGE : volumes de matériaux décaissés (TV=terre végétale, GNT, dallage, rabotage) AVANT les mouvements de terre
+- DEBLAI : déblai calculé APRÈS décapage
+- REMBLAI : remblai calculé APRÈS décapage
+
+RÈGLES MÉTIER OBLIGATOIRES :
+
+1. VOLUME REMBLAI = EXCLUSIVEMENT colonne REMBLAI. JAMAIS la colonne DECAPAGE.
+
+2. ESPACES VERTS (_EV) :
+   - Déduire leur volume de remblai du volume total de remblai (ils se remblaieront avec la TV décapée)
+   - La TV du décapage peut couvrir la couche de TV des _EV (en général 20cm, vérifier)
+   - Pour les talus _EV : utiliser la surface SUIVANT LA PENTE pour l'engazonnement
+
+3. OPTIMISATION GÉNÉRALE :
+   - GNT récupéré au décapage → déduire du volume GNT nécessaire (tableau matériaux)
+   - TV décapage → déduire du volume TV nécessaire (colonne "décapage général ep.")
+   - Appliquer 5% de sécurité sur les déblais (purges, déchets, végétaux) : retirer 5% du volume déblai utilisable en remblai
+
+4. BASSINS (_ASS) :
+   - Bassin étanche : utiliser surface SUIVANT LA PENTE pour calcul bâche (fond + talus + surlargeur 1m)
+   - Talus : ne pas dépasser 1/1, préférer 3/2
+   - Casiers : lit sable 10cm, surlargeur fouille 50cm, remblai autour en GNT, couverture ≥80cm
+
+5. PLATEFORMES REPROFILAGE (_repro) :
+   - Signaler la nécessité de prévoir encrages sur existant, renforcement GB/EME, rabotage
+
+CONTRÔLES À EFFECTUER :
+- Bassin étanche avec surface horizontale seulement → demander réédition avec surface/pente
+- Présence de _repro → signaler points d'attention rabotage et ancrage
+
+FORMAT DE RÉPONSE (HTML) :
+Utilise des balises HTML simples pour structurer la réponse dans l'interface :
+- <div class="result-card"><h4>Titre</h4>...<div class="result-row"><span class="rk">Libellé</span><span class="rv neutral">valeur m³</span></div></div>
+- <div class="big-result deblai">EXCÉDENT DÉBLAI : +XXX m³ → à évacuer</div>
+- <div class="big-result remblai">DÉFICIT REMBLAI : -XXX m³ → matériaux manquants</div>
+- <div class="alert">Avertissement</div>
+- <div class="info">Information / conseil</div>
+- Pour les volumes positifs (excédent): class="rv pos", négatifs (manque): class="rv neg", neutres: class="rv neutral"
+
+Commence ta synthèse par :
+1. Épaisseur de décapage TV prise en compte
+2. Informations sur les couches TV des _EV
+3. Le grand résultat en gras (big-result deblai ou remblai)
+4. Détail du décapage restant et propositions (étaler, épauler, merlon)
+5. Synthèse matériaux si tableau fourni
+6. Alertes et conseils
+
+Sois précis, cite les volumes exacts lus dans les tableaux. Si une valeur est illisible ou ambiguë, signale-le.`;
+
+  // Construire le message avec les PDFs
+  const userContent = [];
+  for (const pdf of pdfContents) {
+    userContent.push({
+      type: 'document',
+      source: { type: 'base64', media_type: 'application/pdf', data: pdf.data }
+    });
+  }
+  userContent.push({
+    type: 'text',
+    text: `Analyse ces ${pdfContents.length} tableau(x) Mensura et produis la synthèse complète des mouvements de terre selon les règles métier. Nomme explicitement chaque plateforme analysée et ses volumes. Réponds en HTML selon le format demandé.`
+  });
+
+  conversationHistory.push({ role: 'user', content: userContent });
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 4000,
+        system: systemPrompt,
+        messages: conversationHistory
+      })
+    });
+
+    const data = await response.json();
+    if (data.error) throw new Error(data.error.message);
+
+    const assistantText = data.content.map(b => b.text || '').join('');
+    conversationHistory.push({ role: 'assistant', content: assistantText });
+    analysisContext = assistantText;
+
+    removeTyping();
+    addMessage('assistant', assistantText, true);
+
+    // Activer chat + merlon
+    userInput.disabled = false;
+    sendBtn.disabled = false;
+    userInput.placeholder = 'Question sur cette analyse (ex: quel est le volume de GNT manquant ?)';
+    showMerlonCalc();
+    btnAnalyse.disabled = false;
+    btnAnalyse.textContent = '↺ Relancer l\'analyse';
+
+  } catch (err) {
+    removeTyping();
+    addMessage('assistant', `❌ Erreur lors de l'analyse : ${err.message}. Vérifiez que les fichiers PDF sont lisibles.`);
+    btnAnalyse.disabled = false;
+  }
+}
+
+// ─── Chat de suivi ───────────────────────────────────────
+async function sendMessage() {
+  const text = userInput.value.trim();
+  if (!text) return;
+
+  userInput.value = '';
+  userInput.disabled = true;
+  sendBtn.disabled = true;
+
+  addMessage('user', text);
+  showTyping();
+
+  conversationHistory.push({ role: 'user', content: text });
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2000,
+        system: `Tu es un expert VRD qui a analysé des tableaux Mensura. Réponds aux questions de suivi de manière précise et concise, en te basant sur l'analyse déjà effectuée. Tu peux utiliser du HTML simple (div, span, strong) pour structurer tes réponses si utile. Classes disponibles : result-card, result-row, rk, rv pos/neg/neutral, alert, info, big-result deblai/remblai.`,
+        messages: conversationHistory
+      })
+    });
+
+    const data = await response.json();
+    if (data.error) throw new Error(data.error.message);
+
+    const reply = data.content.map(b => b.text || '').join('');
+    conversationHistory.push({ role: 'assistant', content: reply });
+
+    removeTyping();
+    addMessage('assistant', reply, true);
+  } catch (err) {
+    removeTyping();
+    addMessage('assistant', `❌ Erreur : ${err.message}`);
+  }
+
+  userInput.disabled = false;
+  sendBtn.disabled = false;
+  userInput.focus();
+}
+
+sendBtn.addEventListener('click', sendMessage);
+userInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+
+// Auto-resize textarea
+userInput.addEventListener('input', () => {
+  userInput.style.height = 'auto';
+  userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
+});
+</script>
+</body>
+</html>
