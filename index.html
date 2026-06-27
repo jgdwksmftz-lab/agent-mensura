@@ -148,6 +148,16 @@
 
   <!-- Sidebar -->
   <div class="sidebar">
+    <!-- Clé API -->
+    <div style="margin-bottom:14px">
+      <label style="font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);display:block;margin-bottom:6px">Clé API Anthropic</label>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input type="password" id="apiKeyInput" placeholder="sk-ant-…" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 10px;font-size:.8rem;font-family:var(--mono);outline:none">
+        <button onclick="toggleKeyVis()" id="toggleKey" title="Afficher/masquer" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--muted);padding:7px 10px;cursor:pointer;font-size:.85rem">👁</button>
+      </div>
+      <p style="font-size:.68rem;color:var(--muted);margin-top:4px;line-height:1.4">Votre clé reste dans le navigateur, jamais transmise ailleurs qu'à api.anthropic.com</p>
+    </div>
+
     <div class="upload-zone" id="dropZone">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>
       <p>Dépose ici les <strong>PDF Mensura</strong><br>Tableau déblais/remblais + matériaux</p>
@@ -317,6 +327,17 @@ function fileToBase64(file) {
   });
 }
 
+// ─── Clé API ─────────────────────────────────────────────
+function getApiKey() {
+  const k = document.getElementById('apiKeyInput').value.trim();
+  if (!k) throw new Error('Veuillez saisir votre clé API Anthropic (sk-ant-…)');
+  return k;
+}
+function toggleKeyVis() {
+  const inp = document.getElementById('apiKeyInput');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
 // ─── Analyse principale ──────────────────────────────────
 btnAnalyse.addEventListener('click', runAnalysis);
 
@@ -372,7 +393,7 @@ CONTRÔLES À EFFECTUER :
 - Présence de _repro → signaler points d'attention rabotage et ancrage
 
 FORMAT DE RÉPONSE (HTML) :
-Utilise des balises HTML simples pour structurer la réponse dans l'interface :
+Utilise uniquement ces balises HTML :
 - <div class="result-card"><h4>Titre</h4>...<div class="result-row"><span class="rk">Libellé</span><span class="rv neutral">valeur m³</span></div></div>
 - <div class="big-result deblai">EXCÉDENT DÉBLAI : +XXX m³ → à évacuer</div>
 - <div class="big-result remblai">DÉFICIT REMBLAI : -XXX m³ → matériaux manquants</div>
@@ -380,13 +401,29 @@ Utilise des balises HTML simples pour structurer la réponse dans l'interface :
 - <div class="info">Information / conseil</div>
 - Pour les volumes positifs (excédent): class="rv pos", négatifs (manque): class="rv neg", neutres: class="rv neutral"
 
-Commence ta synthèse par :
-1. Épaisseur de décapage TV prise en compte
-2. Informations sur les couches TV des _EV
-3. Le grand résultat en gras (big-result deblai ou remblai)
-4. Détail du décapage restant et propositions (étaler, épauler, merlon)
-5. Synthèse matériaux si tableau fourni
-6. Alertes et conseils
+Structure de la synthèse (UNIQUEMENT dans cet ordre, PAS de détail par plateforme) :
+
+1. <div class="result-card"><h4>Hypothèses de calcul</h4> avec les lignes :
+   - Épaisseur TV décapée retenue (ex: 20 cm)
+   - TV _EV : épaisseur prévue (ex: 20 cm) et si le décapage TV suffit à les couvrir
+   - Volume sécurité 5% appliqué (valeur en m³)
+
+2. <div class="result-card"><h4>Bilan mouvements de terre</h4> avec uniquement les lignes globales :
+   - Déblai brut total
+   - Remblai brut total
+   - Déduction remblai _EV
+   - Sécurité 5% déblai
+   - Solde déblai/remblai
+
+3. Le grand bandeau résultat : <div class="big-result deblai"> ou <div class="big-result remblai">
+
+4. <div class="result-card"><h4>Décapage restant</h4> avec :
+   - Volume TV restant après usage _EV
+   - Proposition : étaler en couverture, épaulement de structure, ou merlon de stockage
+
+5. Si tableau matériaux fourni : <div class="result-card"><h4>Bilan matériaux</h4> avec soldes GNT et TV uniquement
+
+6. Alertes <div class="alert"> et conseils <div class="info"> si nécessaire
 
 Sois précis, cite les volumes exacts lus dans les tableaux. Si une valeur est illisible ou ambiguë, signale-le.`;
 
@@ -408,7 +445,12 @@ Sois précis, cite les volumes exacts lus dans les tableaux. Si une valeur est i
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': getApiKey(),
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-iab': 'true'
+      },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 4000,
@@ -459,7 +501,12 @@ async function sendMessage() {
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': getApiKey(),
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-iab': 'true'
+      },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 2000,
