@@ -152,10 +152,13 @@
     <div style="margin-bottom:14px">
       <label style="font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);display:block;margin-bottom:6px">Clé API Anthropic</label>
       <div style="display:flex;gap:6px;align-items:center">
-        <input type="password" id="apiKeyInput" placeholder="sk-ant-…" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 10px;font-size:.8rem;font-family:var(--mono);outline:none">
+        <input type="password" id="apiKeyInput" placeholder="sk-ant-…" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 10px;font-size:.8rem;font-family:var(--mono);outline:none" onblur="saveApiKey()" oninput="document.getElementById('apiKeyStatus').textContent=''" >
         <button onclick="toggleKeyVis()" id="toggleKey" title="Afficher/masquer" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--muted);padding:7px 10px;cursor:pointer;font-size:.85rem">👁</button>
       </div>
-      <p style="font-size:.68rem;color:var(--muted);margin-top:4px;line-height:1.4">Votre clé reste dans le navigateur, jamais transmise ailleurs qu'à api.anthropic.com</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+        <span id="apiKeyStatus" style="font-size:.68rem;color:var(--muted)">Votre clé est mémorisée localement</span>
+        <button onclick="localStorage.removeItem('mensura_api_key');document.getElementById('apiKeyInput').value='';document.getElementById('apiKeyStatus').textContent='Clé effacée';document.getElementById('apiKeyStatus').style.color='var(--red)'" style="background:none;border:none;color:var(--muted);font-size:.68rem;cursor:pointer;text-decoration:underline">Effacer</button>
+      </div>
     </div>
 
     <div class="upload-zone" id="dropZone">
@@ -337,6 +340,19 @@ function toggleKeyVis() {
   const inp = document.getElementById('apiKeyInput');
   inp.type = inp.type === 'password' ? 'text' : 'password';
 }
+function saveApiKey() {
+  const k = document.getElementById('apiKeyInput').value.trim();
+  if (k) localStorage.setItem('mensura_api_key', k);
+}
+// Charger la clé mémorisée au démarrage
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('mensura_api_key');
+  if (saved) {
+    document.getElementById('apiKeyInput').value = saved;
+    document.getElementById('apiKeyStatus').textContent = '✓ Clé mémorisée';
+    document.getElementById('apiKeyStatus').style.color = 'var(--green)';
+  }
+});
 
 // ─── Analyse principale ──────────────────────────────────
 btnAnalyse.addEventListener('click', runAnalysis);
